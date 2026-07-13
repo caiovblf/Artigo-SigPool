@@ -4,6 +4,10 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>SigPool: Analyzing ECDSA Nonce Reuse</title>
+    
+    <script src="https://polyfill.io/v3/polyfill.min.js?features=es6"></script>
+    <script id="MathJax-script" async src="https://cdn.jsdelivr.net/npm/mathjax@3/es5/tex-mml-chtml.js"></script>
+
     <style>
         :root {
             --bg-main: #0d1117;
@@ -13,6 +17,7 @@
             --accent-red: #f85149;
             --accent-green: #3fb950;
             --accent-yellow: #d29922;
+            --accent-purple: #bc8cff;
             --card-bg: #161b22;
             --border-color: #30363d;
             --code-bg: #010409;
@@ -49,14 +54,24 @@
         h3 {
             color: var(--text-main);
             margin-top: 30px;
+            font-size: 1.4em;
         }
         p {
             font-size: 1.1em;
             margin-bottom: 20px;
             color: var(--text-muted);
+            text-align: justify;
         }
         strong {
             color: var(--text-main);
+        }
+        ul {
+            color: var(--text-muted);
+            font-size: 1.1em;
+            margin-bottom: 20px;
+        }
+        li {
+            margin-bottom: 10px;
         }
         .highlight {
             background-color: rgba(210, 153, 34, 0.15);
@@ -80,6 +95,10 @@
             padding: 20px;
             text-align: center;
             box-shadow: 0 4px 6px rgba(0,0,0,0.3);
+            transition: transform 0.2s;
+        }
+        .stat-card:hover {
+            transform: translateY(-5px);
         }
         .stat-value {
             font-size: 2em;
@@ -101,39 +120,22 @@
             font-size: 0.9em;
             margin-bottom: 20px;
             border: 1px solid var(--border-color);
+            line-height: 1.4;
         }
         .danger-text { color: var(--accent-red); font-weight: bold; }
         .success-text { color: var(--accent-green); }
+        .purple-text { color: var(--accent-purple); font-weight: bold; }
         
-        /* Architecture Visual */
-        .architecture {
-            display: flex;
-            justify-content: space-between;
-            align-items: stretch;
-            gap: 15px;
-            margin: 40px 0;
-        }
-        .arch-module {
-            flex: 1;
+        /* Scenario Layout */
+        .scenario-box {
             background: var(--card-bg);
-            border: 1px solid var(--border-color);
-            border-radius: 8px;
-            padding: 15px;
-            text-align: center;
-            box-shadow: 0 2px 4px rgba(0,0,0,0.2);
+            border-left: 4px solid var(--accent-blue);
+            padding: 15px 20px;
+            margin-bottom: 20px;
+            border-radius: 0 8px 8px 0;
         }
-        .arch-module h4 { 
-            margin-top: 0; 
-            color: var(--accent-blue); 
-            border-bottom: 1px solid var(--border-color); 
-            padding-bottom: 10px;
-        }
-        .arch-module ul { 
-            text-align: left; 
-            padding-left: 20px; 
-            font-size: 0.9em; 
-            color: var(--text-muted); 
-        }
+        .scenario-box.red { border-left-color: var(--accent-red); }
+        .scenario-box.green { border-left-color: var(--accent-green); }
 
         .footer {
             margin-top: 60px;
@@ -155,47 +157,78 @@
 <main>
     <h2>The Problem: ECDSA Nonce Reuse</h2>
     <p>
-        The Elliptic Curve Digital Signature Algorithm (ECDSA), heavily utilized in blockchain networks (specifically over the <span class="highlight">secp256k1</span> curve), relies on a critical parameter: a cryptographically secure, single-use random value known as the <strong>nonce (k)</strong>.
+        The Elliptic Curve Digital Signature Algorithm (ECDSA), heavily utilized in blockchain networks over the <span class="highlight">secp256k1</span> curve, relies on a critical parameter: a cryptographically secure, single-use random value known as the <strong>nonce</strong> ($k$).
     </p>
     <p>
-        A catastrophic mathematical failure occurs if the exact same nonce <span class="highlight">k</span> is used to sign two different transactions with the same private key. By isolating the signatures, an external auditor (or attacker) can calculate the nonce and subsequently recover the <strong>private key</strong>.
+        A catastrophic mathematical failure occurs if the exact same nonce $k$ is used to sign two different transactions with the same private key. Because the mathematical structure of ECDSA exposes the internal parameters when $k$ remains static, an external auditor can calculate the nonce and subsequently recover the private key.
     </p>
 
-    <h2>SigPool Architecture & Test Suite Insights</h2>
+    <h2>The Mathematics of the Exploit</h2>
     <p>
-        SigPool is not a wallet and does not interact with live networks. It is a controlled environment designed to demonstrate that <strong>network-level validation is orthogonal to cryptographic compromise</strong>. Our automated test suite guarantees the integrity of these simulations:
+        In ECDSA, a signature consists of a pair of integers $(r, s)$. The parameter $r$ is derived directly from the nonce $k$ and the curve's generator point. If the same $k$ is used for two different message hashes ($z_1$ and $z_2$), the resulting signatures will share the exact same $r$ value.
     </p>
-    
-    <div class="architecture">
-        <div class="arch-module">
-            <h4>Mempool Simulator</h4>
-            <ul>
-                <li>Accepts mathematically valid signatures.</li>
-                <li>Rejects modified payloads (<span class="danger-text">tampered</span> test).</li>
-                <li>Rejects conflicting UTXO spends (<span class="danger-text">double-spend</span> test).</li>
-            </ul>
-        </div>
-        <div class="arch-module">
-            <h4>Block Assembler</h4>
-            <ul>
-                <li>Respects block weight limits (Max 1500w).</li>
-                <li>Prioritizes highest feerate.</li>
-                <li>Evaluates packages keeping parent-child dependencies (<span class="success-text">CPFP</span> test).</li>
-            </ul>
-        </div>
-        <div class="arch-module">
-            <h4>Nonce Auditor</h4>
-            <ul>
-                <li>Independent background process.</li>
-                <li>Flags duplicate <span class="highlight">r</span> values.</li>
-                <li>Recovers private keys and verifies them against victim public keys.</li>
-            </ul>
-        </div>
+    <p>
+        The signature parameter $s$ is calculated as:
+    </p>
+    <p style="text-align: center; font-size: 1.2em;">
+        $$s = k^{-1}(z + r \cdot d) \pmod n$$
+    </p>
+    <p>
+        Where $d$ is the strictly confidential private key, and $n$ is the order of the curve. If an attacker possesses two signatures $(r, s_1)$ and $(r, s_2)$ for messages $z_1$ and $z_2$, they can isolate the reused nonce $k$ using simple modular arithmetic:
+    </p>
+    <p style="text-align: center; font-size: 1.2em;">
+        $$k = (z_1 - z_2)(s_1 - s_2)^{-1} \pmod n$$
+    </p>
+    <p>
+        Once $k$ is isolated, the attacker trivially extracts the private key $d$, compromising the entire wallet:
+    </p>
+    <p style="text-align: center; font-size: 1.2em;">
+        $$d = r^{-1}(s_1 \cdot k - z_1) \pmod n$$
+    </p>
+
+    <h2>Comprehensive Laboratory Scenarios</h2>
+    <p>
+        To study this behavior in an isolated environment, SigPool implements a miniature transactional ecosystem containing a cryptographic engine, a simplified mempool, and a block assembler. The project evaluates five distinct topological scenarios:
+    </p>
+
+    <div class="scenario-box green">
+        <h3 style="margin-top: 0; color: var(--accent-green);">1. The Safe Baseline</h3>
+        <p>
+            Two transactions are signed by the same private key using entirely different, cryptographically secure nonces. The resulting signatures are valid, the mempool accepts both transactions, and the external auditor is mathematically unable to correlate the signatures or extract the key.
+        </p>
     </div>
 
-    <h2>Real-World Simulation Data: Scenario 'nonce-reuse'</h2>
+    <div class="scenario-box red">
+        <h3 style="margin-top: 0; color: var(--accent-red);">2. The Nonce Reuse (Critical Vulnerability)</h3>
+        <p>
+            Two distinct transactions are signed by the same key using the <em>exact same nonce</em>. Because the signatures remain mathematically valid regarding the curve, the mempool flawlessly accepts both transactions. However, the background auditor detects the identical $r$ values, executes the extraction algorithm, and successfully recovers the private key.
+        </p>
+    </div>
+
+    <div class="scenario-box">
+        <h3 style="margin-top: 0;">3. Payload Tampering</h3>
+        <p>
+            A transaction is properly signed, but its payload is maliciously altered post-signature. This scenario proves that the signature no longer matches the message hash ($z$). The mempool correctly rejects the transaction due to an invalid signature, safeguarding the network.
+        </p>
+    </div>
+
+    <div class="scenario-box">
+        <h3 style="margin-top: 0;">4. Double-Spend Conflict</h3>
+        <p>
+            Two transactions attempt to spend the exact same Unspent Transaction Output (UTXO). The mempool processes them sequentially: the first transaction is accepted, while the second is instantly rejected under the <span class="highlight">conflict-double-spend</span> rule, preventing ledger corruption.
+        </p>
+    </div>
+
+    <div class="scenario-box">
+        <h3 style="margin-top: 0;">5. Child Pays for Parent (CPFP)</h3>
+        <p>
+            A demonstration of advanced block assembly mechanics. A "parent" transaction is broadcasted with an exceptionally low fee, followed by a dependent "child" transaction bearing a massive fee. The block assembler evaluates them as a unified package, respecting structural dependencies (parent strictly before child) and optimizing inclusion based on the combined average feerate.
+        </p>
+    </div>
+
+    <h2>Real-World Simulation Data</h2>
     <p>
-        Below is the telemetry from an active run using <span class="highlight">--scenario nonce-reuse --seed 42</span>. The system generated two distinct transactions, signed them with the same private key, and intentionally reused the nonce.
+        Below is the telemetry extracted directly from a <code>nonce-reuse</code> execution (Seed: 42). The system generated two distinct transactions, signed them with the same private key, and intentionally forced a nonce collision.
     </p>
 
     <div class="stats-grid">
@@ -216,13 +249,12 @@
         </div>
     </div>
 
-    <h3>Cryptographic Evidence</h3>
+    <h3>Cryptographic Evidence (JSON Snapshot)</h3>
     <p>
-        As verified by our unit test, reusing the nonce results in the exact same <span class="highlight">r</span> value across different signatures. The auditor catches this footprint:
+        As verified by the automated test suite, reusing the nonce produces an identical <span class="highlight">r</span> value across different message hashes. The auditor script isolates this footprint:
     </p>
 
     <div class="data-block">
-// Audit Findings Report (JSON Snapshot)
 "audit_findings": [
   {
     "finding_type": "ecdsa_nonce_reuse",
@@ -230,7 +262,7 @@
     "private_key_recovered": <span class="danger-text">true</span>,
     "proof_public_key_matches": true,
     
-    // The Vulnerability Footprint:
+    <span class="purple-text">// The Vulnerability Footprint (Identical 'r' value):</span>
     "repeated_r": <span class="danger-text">89974221008586585849499313593199188606814939053973013180529552853651080375000</span>,
     
     "recovered_k": 113620001276782953760652746956743836848108236677647000044266733231209368527092,
@@ -244,10 +276,10 @@
 
     <h2>The Paradox of Validity</h2>
     <p>
-        The most dangerous aspect of this vulnerability is demonstrated by the mempool output. The mempool accepted <strong>2 transactions</strong> and the block assembler successfully packed them into a block weighing <strong>1700 weight units</strong> with an average feerate of <strong>0.88 sats/vB</strong>. 
+        The most dangerous aspect of this vulnerability is perfectly captured by the block assembler logs. The mempool accepted <strong>2 transactions</strong>, and the block assembler successfully packed them into a simplified block weighing <strong>1700 weight units</strong> with a combined average feerate of <strong>0.88 sats/vB</strong>. 
     </p>
     <p>
-        Because the signatures are mathematically perfect, traditional node consensus rules are fully satisfied. The network remains entirely unaware that the owner's private key has been exposed to the public through the auditor log, proving that strong consensus rules cannot protect against weak cryptographic implementations.
+        Because the signatures are mathematically flawless, traditional node consensus rules are fully satisfied. The network remains entirely unaware that the owner's private key has been exposed to the public. This simulation fundamentally proves that robust network consensus rules cannot protect users against weak cryptographic implementations at the wallet level.
     </p>
 
 </main>
