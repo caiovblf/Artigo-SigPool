@@ -1,62 +1,126 @@
 <!DOCTYPE html>
-<html lang="pt-BR">
+<html lang="en">
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>SigPool: Analisando a Reutilização de Nonce no ECDSA</title>
+    <title>SigPool: Analyzing ECDSA Nonce Reuse</title>
     <style>
+        :root {
+            --bg-main: #f4f7f6;
+            --text-main: #2d3748;
+            --accent-blue: #3182ce;
+            --accent-red: #e53e3e;
+            --accent-green: #38a169;
+            --card-bg: #ffffff;
+            --border-color: #e2e8f0;
+        }
         body {
             font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
             line-height: 1.6;
-            color: #333;
-            max-width: 800px;
+            color: var(--text-main);
+            max-width: 900px;
             margin: 0 auto;
-            padding: 20px;
-            background-color: #f9f9f9;
+            padding: 30px 20px;
+            background-color: var(--bg-main);
         }
         header {
-            border-bottom: 2px solid #e1e4e8;
-            padding-bottom: 20px;
-            margin-bottom: 30px;
+            text-align: center;
+            margin-bottom: 40px;
         }
         h1 {
-            color: #24292e;
-            font-size: 2.5em;
+            color: #1a202c;
+            font-size: 2.8em;
             margin-bottom: 10px;
+            letter-spacing: -0.02em;
         }
         h2 {
-            color: #0366d6;
+            color: var(--accent-blue);
             font-size: 1.8em;
-            margin-top: 40px;
-            border-bottom: 1px solid #eaecef;
-            padding-bottom: 5px;
+            margin-top: 50px;
+            border-bottom: 2px solid var(--border-color);
+            padding-bottom: 8px;
+        }
+        h3 {
+            color: #4a5568;
+            margin-top: 30px;
         }
         p {
             font-size: 1.1em;
-            text-align: justify;
+            margin-bottom: 20px;
         }
         .highlight {
-            background-color: #fffbdd;
-            padding: 2px 5px;
-            border-radius: 3px;
+            background-color: #edf2f7;
+            padding: 2px 6px;
+            border-radius: 4px;
             font-family: monospace;
+            color: #d69e2e;
         }
-        pre {
-            background-color: #f6f8fa;
-            border-radius: 6px;
-            padding: 16px;
-            overflow: auto;
-            font-family: "SFMono-Regular", Consolas, "Liberation Mono", Menlo, monospace;
-            font-size: 0.9em;
-            border: 1px solid #e1e4e8;
+        /* Dashboard Stats */
+        .stats-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+            gap: 20px;
+            margin: 30px 0;
         }
-        .footer {
-            margin-top: 50px;
-            padding-top: 20px;
-            border-top: 1px solid #e1e4e8;
-            font-size: 0.9em;
-            color: #586069;
+        .stat-card {
+            background: var(--card-bg);
+            border: 1px solid var(--border-color);
+            border-radius: 8px;
+            padding: 20px;
             text-align: center;
+            box-shadow: 0 4px 6px rgba(0,0,0,0.05);
+        }
+        .stat-value {
+            font-size: 2em;
+            font-weight: bold;
+            color: var(--accent-blue);
+            margin: 10px 0;
+        }
+        .stat-value.danger { color: var(--accent-red); }
+        .stat-value.success { color: var(--accent-green); }
+        
+        /* Code & Data blocks */
+        .data-block {
+            background-color: #2d3748;
+            color: #f7fafc;
+            border-radius: 8px;
+            padding: 20px;
+            overflow-x: auto;
+            font-family: "SFMono-Regular", Consolas, monospace;
+            font-size: 0.9em;
+            margin-bottom: 20px;
+            box-shadow: inset 0 2px 4px rgba(0,0,0,0.2);
+        }
+        .danger-text { color: #fc8181; font-weight: bold; }
+        .success-text { color: #68d391; }
+        
+        /* Architecture Visual */
+        .architecture {
+            display: flex;
+            justify-content: space-between;
+            align-items: stretch;
+            gap: 15px;
+            margin: 40px 0;
+        }
+        .arch-module {
+            flex: 1;
+            background: var(--card-bg);
+            border: 1px solid var(--border-color);
+            border-radius: 8px;
+            padding: 15px;
+            text-align: center;
+            box-shadow: 0 2px 4px rgba(0,0,0,0.05);
+        }
+        .arch-module h4 { margin-top: 0; color: var(--accent-blue); border-bottom: 1px solid #eee; padding-bottom: 10px;}
+        .arch-module ul { text-align: left; padding-left: 20px; font-size: 0.9em; color: #4a5568; }
+
+        .footer {
+            margin-top: 60px;
+            padding-top: 20px;
+            border-top: 1px solid var(--border-color);
+            text-align: center;
+            color: #718096;
+            font-size: 0.9em;
         }
     </style>
 </head>
@@ -64,57 +128,111 @@
 
 <header>
     <h1>SigPool</h1>
-    <p><em>Estudo prático sobre a fragilidade de assinaturas criptográficas no ecossistema de ativos digitais</em></p>
+    <p><em>An Educational Laboratory for ECDSA Nonce Reuse Vulnerabilities</em></p>
 </header>
 
 <main>
-    <h2>O Problema: A Reutilização do Nonce no ECDSA</h2>
+    <h2>The Problem: ECDSA Nonce Reuse</h2>
     <p>
-        O Algoritmo de Assinatura Digital de Curva Elíptica (ECDSA), amplamente utilizado em redes de blockchain como o Bitcoin (sobre a curva <span class="highlight">secp256k1</span>), possui uma dependência crítica: a geração de um valor aleatório e de uso único para cada assinatura, conhecido como <strong>nonce (k)</strong>.
+        The Elliptic Curve Digital Signature Algorithm (ECDSA), heavily utilized in blockchain networks (specifically over the <span class="highlight">secp256k1</span> curve), relies on a critical parameter: a cryptographically secure, single-use random value known as the <strong>nonce (k)</strong>.
     </p>
     <p>
-        Se um mesmo valor de <span class="highlight">k</span> for reutilizado para assinar duas mensagens ou transações diferentes utilizando a mesma chave privada, ocorre uma falha matemática grave. Um observador externo que tenha acesso a ambas as assinaturas válidas pode facilmente calcular o nonce e, consequentemente, extrair a <strong>chave privada</strong> correspondente de forma quase instantânea.
+        A catastrophic mathematical failure occurs if the exact same nonce <span class="highlight">k</span> is used to sign two different transactions with the same private key. By isolating the signatures, an external auditor (or attacker) can calculate the nonce and subsequently recover the <strong>private key</strong>.
     </p>
 
+    <h2>SigPool Architecture & Test Suite Insights</h2>
+    <p>
+        SigPool is not a wallet and does not interact with live networks. It is a controlled environment designed to demonstrate that <strong>network-level validation is orthogonal to cryptographic compromise</strong>. Our automated test suite guarantees the integrity of these simulations:
+    </p>
     
+    <div class="architecture">
+        <div class="arch-module">
+            <h4>Mempool Simulator</h4>
+            <ul>
+                <li>Accepts mathematically valid signatures.</li>
+                <li>Rejects modified payloads (<span class="danger-text">tampered</span> test).</li>
+                <li>Rejects conflicting UTXO spends (<span class="danger-text">double-spend</span> test).</li>
+            </ul>
+        </div>
+        <div class="arch-module">
+            <h4>Block Assembler</h4>
+            <ul>
+                <li>Respects block weight limits (Max 1500w).</li>
+                <li>Prioritizes highest feerate.</li>
+                <li>Evaluates packages keeping parent-child dependencies (<span class="success-text">CPFP</span> test).</li>
+            </ul>
+        </div>
+        <div class="arch-module">
+            <h4>Nonce Auditor</h4>
+            <ul>
+                <li>Independent background process.</li>
+                <li>Flags duplicate <span class="highlight">r</span> values.</li>
+                <li>Recovers private keys and verifies them against victim public keys.</li>
+            </ul>
+        </div>
+    </div>
 
-    <h2>Relevância para o Ecossistema</h2>
+    <h2>Real-World Simulation Data: Scenario 'nonce-reuse'</h2>
     <p>
-        No ecossistema de criptomoedas, a chave privada representa a propriedade soberana e irreversível dos fundos. Diferente de sistemas bancários tradicionais, não existe uma entidade central para estornar transações caso uma chave seja comprometida. 
+        Below is the telemetry from an active run using <code>--scenario nonce-reuse --seed 42</code>. The system generated two distinct transactions, signed them with the same private key, and intentionally reused the nonce.
+    </p>
+
+    <div class="stats-grid">
+        <div class="stat-card">
+            <h3>Mempool Status</h3>
+            <div class="stat-value success">Accepted</div>
+            <p style="font-size: 0.9em; color: #718096;">Both signatures mathematically valid</p>
+        </div>
+        <div class="stat-card">
+            <h3>Auditor Findings</h3>
+            <div class="stat-value danger">1 Critical</div>
+            <p style="font-size: 0.9em; color: #718096;">ECDSA Nonce Reuse Detected</p>
+        </div>
+        <div class="stat-card">
+            <h3>Key Recovery</h3>
+            <div class="stat-value danger">Compromised</div>
+            <p style="font-size: 0.9em; color: #718096;">Private key successfully extracted</p>
+        </div>
+    </div>
+
+    <h3>Cryptographic Evidence</h3>
+    <p>
+        As verified by our <code>test_same_nonce_produces_same_r_for_different_messages</code> unit test, reusing the nonce results in the exact same <span class="highlight">r</span> value across different signatures. The auditor catches this footprint:
+    </p>
+
+    <div class="data-block">
+// Audit Findings Report (JSON Snapshot)
+"audit_findings": [
+  {
+    "finding_type": "ecdsa_nonce_reuse",
+    "severity": <span class="danger-text">"critical"</span>,
+    "private_key_recovered": <span class="danger-text">true</span>,
+    "proof_public_key_matches": true,
+    
+    // The Vulnerability Footprint:
+    "repeated_r": <span class="danger-text">89974221008586585849499313593199188606814939053973013180529552853651080375000</span>,
+    
+    "recovered_k": 113620001276782953760652746956743836848108236677647000044266733231209368527092,
+    "txids": [
+      "b19d631b0837513ae67dc56a52c70f4a60f0ca0bb51fb2d7a7a329d9e750e4e7",
+      "21e380a84af964cd6844619eac70ce3f63283b3432bded8e36804fcf0ebdb2fb"
+    ]
+  }
+]
+    </div>
+
+    <h2>The Paradox of Validity</h2>
+    <p>
+        The most dangerous aspect of this vulnerability is demonstrated by the mempool output. The mempool accepted <strong>2 transactions</strong> and the block assembler successfully packed them into a block weighing <strong>1700 weight units</strong> with an average feerate of <strong>0.88 sats/vB</strong>. 
     </p>
     <p>
-        O grande perigo dessa vulnerabilidade reside no fato de que <strong>as transações continuam sendo matematicamente válidas</strong>. Elas entram na mempool, passam pelas verificações padrão dos nós e são incluídas em blocos sem levantar alertas imediatos nos validadores comuns. No entanto, a segurança do endereço foi completamente violada nos bastidores, permitindo que atacantes drenem todo o saldo restante.
+        Because the signatures are mathematically perfect, traditional node consensus rules are fully satisfied. The network remains entirely unaware that the owner's private key has been exposed to the public through the auditor log, proving that strong consensus rules cannot protect against weak cryptographic implementations.
     </p>
 
-    <h2>A Solução Proposta: O Ambiente SigPool</h2>
-    <p>
-        Para mitigar o desconhecimento técnico e fornecer uma plataforma de testes segura, foi desenvolvido o <strong>SigPool</strong>: um laboratório didático local focado em simular e auditar essa falha clássica sem expor fundos reais à rede principal (mainnet).
-    </p>
-    <p>
-        O projeto simula um ambiente completo em miniatura:
-    </p>
-    <ul>
-        <li><strong>Geração de Cenários Controlados:</strong> Permite injetar intencionalmente a falha de reutilização de nonce para fins de estudo (<span class="highlight">nonce-reuse</span>), além de testar comportamentos normais (<span class="highlight">safe</span>) e políticas de gastos como CPFP (Child Pays for Parent).</li>
-        <li><strong>Auditor de Nonce Independente:</strong> Modulou-se um componente capaz de agrupar assinaturas públicas e flagrar instantaneamente a repetição do parâmetro <span class="highlight">r</span>, recuperando a chave privada de teste de forma automatizada.</li>
-        <li><strong>Isolamento de Camadas:</strong> Demonstra que a validação de formato na mempool e a descoberta de chaves comprometidas por auditoria são processos ortogonais, reforçando boas práticas de desenvolvimento de carteiras e infraestrutura de nós.</li>
-    </ul>
-
-    <h2>Como Executar a Demonstração</h2>
-    <p>O laboratório funciona localmente de forma simples através de comandos de terminal:</p>
-    <pre>
-# Clonar e entrar na pasta do projeto
-cd project
-
-# Instalar dependências necessárias
-python -m pip install -r requirements.txt
-
-# Executar o cenário de vulnerabilidade
-python -m sigpool run --scenario nonce-reuse --seed 42
-    </pre>
 </main>
 
 <div class="footer">
-    <p>Artigo acadêmico desenvolvido para demonstração do projeto SigPool. Uso estritamente didático.</p>
+    <p>Educational Academic Paper • Based on SigPool Repository Data (Tests & JSON Outputs)</p>
 </div>
 
 </body>
