@@ -5,8 +5,6 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>SigPool: Analyzing ECDSA Nonce Reuse</title>
     
-    <script id="MathJax-script" async src="https://cdn.jsdelivr.net/npm/mathjax@3/es5/tex-mml-chtml.js"></script>
-
     <style>
         :root {
             --bg-main: #0d1117;
@@ -78,6 +76,20 @@
             border-radius: 4px;
             font-family: monospace;
             color: var(--accent-yellow);
+        }
+        .math {
+            font-family: "Times New Roman", Times, serif;
+            font-style: italic;
+        }
+        .math-block {
+            font-family: "Times New Roman", Times, serif;
+            font-size: 1.3em;
+            text-align: center;
+            margin: 20px 0;
+            padding: 15px;
+            background: var(--card-bg);
+            border-radius: 8px;
+            border: 1px solid var(--border-color);
         }
         
         /* Dashboard Stats */
@@ -156,34 +168,34 @@
 <main>
     <h2>The Problem: ECDSA Nonce Reuse</h2>
     <p>
-        The Elliptic Curve Digital Signature Algorithm (ECDSA), heavily utilized in blockchain networks over the <span class="highlight">secp256k1</span> curve, relies on a critical parameter: a cryptographically secure, single-use random value known as the <strong>nonce</strong> ($k$).
+        The Elliptic Curve Digital Signature Algorithm (ECDSA), heavily utilized in blockchain networks over the <span class="highlight">secp256k1</span> curve, relies on a critical parameter: a cryptographically secure, single-use random value known as the <strong>nonce</strong> (<span class="math">k</span>).
     </p>
     <p>
-        A catastrophic mathematical failure occurs if the exact same nonce $k$ is used to sign two different transactions with the same private key. Because the mathematical structure of ECDSA exposes the internal parameters when $k$ remains static, an external auditor can calculate the nonce and subsequently recover the private key.
+        A catastrophic mathematical failure occurs if the exact same nonce <span class="math">k</span> is used to sign two different transactions with the same private key. Because the mathematical structure of ECDSA exposes the internal parameters when <span class="math">k</span> remains static, an external auditor can calculate the nonce and subsequently recover the private key.
     </p>
 
     <h2>The Mathematics of the Exploit</h2>
     <p>
-        In ECDSA, a signature consists of a pair of integers $(r, s)$. The parameter $r$ is derived directly from the nonce $k$ and the curve's generator point. If the same $k$ is used for two different message hashes ($z_1$ and $z_2$), the resulting signatures will share the exact same $r$ value.
+        In ECDSA, a signature consists of a pair of integers (<span class="math">r</span>, <span class="math">s</span>). The parameter <span class="math">r</span> is derived directly from the nonce <span class="math">k</span> and the curve's generator point. If the same <span class="math">k</span> is used for two different message hashes (<span class="math">z<sub>1</sub></span> and <span class="math">z<sub>2</sub></span>), the resulting signatures will share the exact same <span class="math">r</span> value.
     </p>
     <p>
-        The signature parameter $s$ is calculated as:
+        The signature parameter <span class="math">s</span> is calculated as:
     </p>
-    <p style="text-align: center; font-size: 1.2em;">
-        $$s = k^{-1}(z + r \cdot d) \pmod n$$
-    </p>
+    <div class="math-block">
+        s = k<sup>-1</sup>(z + r &middot; d) (mod n)
+    </div>
     <p>
-        Where $d$ is the strictly confidential private key, and $n$ is the order of the curve. If an attacker possesses two signatures $(r, s_1)$ and $(r, s_2)$ for messages $z_1$ and $z_2$, they can isolate the reused nonce $k$ using simple modular arithmetic:
+        Where <span class="math">d</span> is the strictly confidential private key, and <span class="math">n</span> is the order of the curve. If an attacker possesses two signatures (<span class="math">r</span>, <span class="math">s<sub>1</sub></span>) and (<span class="math">r</span>, <span class="math">s<sub>2</sub></span>) for messages <span class="math">z<sub>1</sub></span> and <span class="math">z<sub>2</sub></span>, they can isolate the reused nonce <span class="math">k</span> using simple modular arithmetic:
     </p>
-    <p style="text-align: center; font-size: 1.2em;">
-        $$k = (z_1 - z_2)(s_1 - s_2)^{-1} \pmod n$$
-    </p>
+    <div class="math-block">
+        k = (z<sub>1</sub> - z<sub>2</sub>)(s<sub>1</sub> - s<sub>2</sub>)<sup>-1</sup> (mod n)
+    </div>
     <p>
-        Once $k$ is isolated, the attacker trivially extracts the private key $d$, compromising the entire wallet:
+        Once <span class="math">k</span> is isolated, the attacker trivially extracts the private key <span class="math">d</span>, compromising the entire wallet:
     </p>
-    <p style="text-align: center; font-size: 1.2em;">
-        $$d = r^{-1}(s_1 \cdot k - z_1) \pmod n$$
-    </p>
+    <div class="math-block">
+        d = r<sup>-1</sup>(s<sub>1</sub> &middot; k - z<sub>1</sub>) (mod n)
+    </div>
 
     <h2>Comprehensive Laboratory Scenarios</h2>
     <p>
@@ -200,14 +212,14 @@
     <div class="scenario-box red">
         <h3 style="margin-top: 0; color: var(--accent-red);">2. The Nonce Reuse (Critical Vulnerability)</h3>
         <p>
-            Two distinct transactions are signed by the same key using the <em>exact same nonce</em>. Because the signatures remain mathematically valid regarding the curve, the mempool flawlessly accepts both transactions. However, the background auditor detects the identical $r$ values, executes the extraction algorithm, and successfully recovers the private key.
+            Two distinct transactions are signed by the same key using the <em>exact same nonce</em>. Because the signatures remain mathematically valid regarding the curve, the mempool flawlessly accepts both transactions. However, the background auditor detects the identical <span class="math">r</span> values, executes the extraction algorithm, and successfully recovers the private key.
         </p>
     </div>
 
     <div class="scenario-box">
         <h3 style="margin-top: 0;">3. Payload Tampering</h3>
         <p>
-            A transaction is properly signed, but its payload is maliciously altered post-signature. This scenario proves that the signature no longer matches the message hash ($z$). The mempool correctly rejects the transaction due to an invalid signature, safeguarding the network.
+            A transaction is properly signed, but its payload is maliciously altered post-signature. This scenario proves that the signature no longer matches the message hash (<span class="math">z</span>). The mempool correctly rejects the transaction due to an invalid signature, safeguarding the network.
         </p>
     </div>
 
