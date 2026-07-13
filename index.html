@@ -1,1 +1,121 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>SigPool: Analisando a Reutilização de Nonce no ECDSA</title>
+    <style>
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+            line-height: 1.6;
+            color: #333;
+            max-width: 800px;
+            margin: 0 auto;
+            padding: 20px;
+            background-color: #f9f9f9;
+        }
+        header {
+            border-bottom: 2px solid #e1e4e8;
+            padding-bottom: 20px;
+            margin-bottom: 30px;
+        }
+        h1 {
+            color: #24292e;
+            font-size: 2.5em;
+            margin-bottom: 10px;
+        }
+        h2 {
+            color: #0366d6;
+            font-size: 1.8em;
+            margin-top: 40px;
+            border-bottom: 1px solid #eaecef;
+            padding-bottom: 5px;
+        }
+        p {
+            font-size: 1.1em;
+            text-align: justify;
+        }
+        .highlight {
+            background-color: #fffbdd;
+            padding: 2px 5px;
+            border-radius: 3px;
+            font-family: monospace;
+        }
+        pre {
+            background-color: #f6f8fa;
+            border-radius: 6px;
+            padding: 16px;
+            overflow: auto;
+            font-family: "SFMono-Regular", Consolas, "Liberation Mono", Menlo, monospace;
+            font-size: 0.9em;
+            border: 1px solid #e1e4e8;
+        }
+        .footer {
+            margin-top: 50px;
+            padding-top: 20px;
+            border-top: 1px solid #e1e4e8;
+            font-size: 0.9em;
+            color: #586069;
+            text-align: center;
+        }
+    </style>
+</head>
+<body>
 
+<header>
+    <h1>SigPool</h1>
+    <p><em>Estudo prático sobre a fragilidade de assinaturas criptográficas no ecossistema de ativos digitais</em></p>
+</header>
+
+<main>
+    <h2>O Problema: A Reutilização do Nonce no ECDSA</h2>
+    <p>
+        O Algoritmo de Assinatura Digital de Curva Elíptica (ECDSA), amplamente utilizado em redes de blockchain como o Bitcoin (sobre a curva <span class="highlight">secp256k1</span>), possui uma dependência crítica: a geração de um valor aleatório e de uso único para cada assinatura, conhecido como <strong>nonce (k)</strong>.
+    </p>
+    <p>
+        Se um mesmo valor de <span class="highlight">k</span> for reutilizado para assinar duas mensagens ou transações diferentes utilizando a mesma chave privada, ocorre uma falha matemática grave. Um observador externo que tenha acesso a ambas as assinaturas válidas pode facilmente calcular o nonce e, consequentemente, extrair a <strong>chave privada</strong> correspondente de forma quase instantânea.
+    </p>
+
+    
+
+    <h2>Relevância para o Ecossistema</h2>
+    <p>
+        No ecossistema de criptomoedas, a chave privada representa a propriedade soberana e irreversível dos fundos. Diferente de sistemas bancários tradicionais, não existe uma entidade central para estornar transações caso uma chave seja comprometida. 
+    </p>
+    <p>
+        O grande perigo dessa vulnerabilidade reside no fato de que <strong>as transações continuam sendo matematicamente válidas</strong>. Elas entram na mempool, passam pelas verificações padrão dos nós e são incluídas em blocos sem levantar alertas imediatos nos validadores comuns. No entanto, a segurança do endereço foi completamente violada nos bastidores, permitindo que atacantes drenem todo o saldo restante.
+    </p>
+
+    <h2>A Solução Proposta: O Ambiente SigPool</h2>
+    <p>
+        Para mitigar o desconhecimento técnico e fornecer uma plataforma de testes segura, foi desenvolvido o <strong>SigPool</strong>: um laboratório didático local focado em simular e auditar essa falha clássica sem expor fundos reais à rede principal (mainnet).
+    </p>
+    <p>
+        O projeto simula um ambiente completo em miniatura:
+    </p>
+    <ul>
+        <li><strong>Geração de Cenários Controlados:</strong> Permite injetar intencionalmente a falha de reutilização de nonce para fins de estudo (<span class="highlight">nonce-reuse</span>), além de testar comportamentos normais (<span class="highlight">safe</span>) e políticas de gastos como CPFP (Child Pays for Parent).</li>
+        <li><strong>Auditor de Nonce Independente:</strong> Modulou-se um componente capaz de agrupar assinaturas públicas e flagrar instantaneamente a repetição do parâmetro <span class="highlight">r</span>, recuperando a chave privada de teste de forma automatizada.</li>
+        <li><strong>Isolamento de Camadas:</strong> Demonstra que a validação de formato na mempool e a descoberta de chaves comprometidas por auditoria são processos ortogonais, reforçando boas práticas de desenvolvimento de carteiras e infraestrutura de nós.</li>
+    </ul>
+
+    <h2>Como Executar a Demonstração</h2>
+    <p>O laboratório funciona localmente de forma simples através de comandos de terminal:</p>
+    <pre>
+# Clonar e entrar na pasta do projeto
+cd project
+
+# Instalar dependências necessárias
+python -m pip install -r requirements.txt
+
+# Executar o cenário de vulnerabilidade
+python -m sigpool run --scenario nonce-reuse --seed 42
+    </pre>
+</main>
+
+<div class="footer">
+    <p>Artigo acadêmico desenvolvido para demonstração do projeto SigPool. Uso estritamente didático.</p>
+</div>
+
+</body>
+</html>
